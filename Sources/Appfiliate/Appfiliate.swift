@@ -63,7 +63,7 @@ public final class Appfiliate {
             "screen_height": Int(UIScreen.main.bounds.height),
             "screen_scale": Int(UIScreen.main.scale),
             "timezone": TimeZone.current.identifier,
-            "language": Locale.current.language.languageCode?.identifier ?? "unknown",
+            "language": Locale.preferredLanguages.first ?? "unknown",
             "languages": Locale.preferredLanguages,
             "hw_concurrency": ProcessInfo.processInfo.activeProcessorCount,
             "idfv": UIDevice.current.identifierForVendor?.uuidString ?? "unknown",

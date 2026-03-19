@@ -1,0 +1,3 @@
+module Appfiliate {
+    header "/Users/olicameron/Developer/Appfiliate/appfiliate-ios-sdk/.build/arm64-apple-macosx/debug/Appfiliate.build/include/Appfiliate-Swift.h"
+}
