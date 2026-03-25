@@ -13,6 +13,8 @@ public final class Appfiliate {
     private static var apiKey: String?
     private static var apiBase = "https://us-central1-appfiliate-5a18b.cloudfunctions.net/api"
     private static var isConfigured = false
+    private static var pendingUserId: String?
+    private static var attributionInFlight = false
 
     /// Configure Appfiliate with your app credentials.
     /// Call this once in your App init or AppDelegate didFinishLaunching.
@@ -50,9 +52,12 @@ public final class Appfiliate {
             // Already tracked — read cached result
             if let cached = cachedAttribution() {
                 completion?(cached)
+                flushPendingUserId()
             }
             return
         }
+
+        attributionInFlight = true
 
         let payload: [String: Any] = [
             "app_id": appId ?? "",
@@ -89,10 +94,13 @@ public final class Appfiliate {
                 UserDefaults.standard.set(attribution.matched, forKey: "appfiliate_matched")
 
                 print("[Appfiliate] Install attribution: matched=\(attribution.matched), confidence=\(attribution.confidence), method=\(attribution.method)")
+                attributionInFlight = false
                 completion?(attribution)
+                flushPendingUserId()
 
             case .failure(let error):
                 print("[Appfiliate] Attribution error: \(error.localizedDescription)")
+                attributionInFlight = false
                 // Don't mark as tracked so it retries next launch
                 completion?(AttributionResult(matched: false, attributionId: nil, confidence: 0, method: "error", clickId: nil))
             }
@@ -171,6 +179,59 @@ public final class Appfiliate {
     /// The attribution ID for this install (nil if not attributed)
     public static var attributionId: String? {
         UserDefaults.standard.string(forKey: "appfiliate_attribution_id")
+    }
+
+    /// Link an external user ID (e.g. RevenueCat appUserID) to this install's attribution.
+    /// This allows server-side integrations (webhooks) to attribute purchases automatically.
+    ///
+    /// ```swift
+    /// Appfiliate.setUserId(Purchases.shared.appUserID)
+    /// ```
+    public static func setUserId(_ userId: String) {
+        guard isConfigured else {
+            print("[Appfiliate] Error: call Appfiliate.configure() before setUserId()")
+            return
+        }
+
+        // If attribution is still in flight, queue the user ID and send it when attribution completes
+        if attributionInFlight {
+            pendingUserId = userId
+            return
+        }
+
+        guard let attributionId = UserDefaults.standard.string(forKey: "appfiliate_attribution_id") else {
+            // Attribution finished but wasn't matched — queue in case of retry on next launch
+            pendingUserId = userId
+            return
+        }
+
+        sendUserId(userId, attributionId: attributionId)
+    }
+
+    private static func sendUserId(_ userId: String, attributionId: String) {
+        let payload: [String: Any] = [
+            "app_id": appId ?? "",
+            "attribution_id": attributionId,
+            "user_id": userId,
+            "sdk_version": sdkVersion
+        ]
+
+        post(endpoint: "/v1/user-id", payload: payload) { result in
+            switch result {
+            case .success:
+                print("[Appfiliate] User ID linked: \(userId)")
+            case .failure(let error):
+                print("[Appfiliate] setUserId error: \(error.localizedDescription)")
+            }
+        }
+    }
+
+    private static func flushPendingUserId() {
+        guard let userId = pendingUserId else { return }
+        pendingUserId = nil
+
+        guard let attributionId = UserDefaults.standard.string(forKey: "appfiliate_attribution_id") else { return }
+        sendUserId(userId, attributionId: attributionId)
     }
 
     // MARK: - Private
