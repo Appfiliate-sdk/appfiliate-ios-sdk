@@ -208,6 +208,18 @@ public final class Appfiliate {
         sendUserId(userId, attributionId: attributionId)
     }
 
+    /// Async convenience — resolves the user ID for you so the caller doesn't need Task/try.
+    ///
+    /// ```swift
+    /// Appfiliate.setUserId { try await Qonversion.shared().userInfo().qonversionId }
+    /// ```
+    public static func setUserId(_ provider: @escaping () async throws -> String) {
+        Task {
+            guard let userId = try? await provider() else { return }
+            setUserId(userId)
+        }
+    }
+
     private static func sendUserId(_ userId: String, attributionId: String) {
         let payload: [String: Any] = [
             "app_id": appId ?? "",
